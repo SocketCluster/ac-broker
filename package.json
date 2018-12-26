@@ -1,7 +1,7 @@
 {
   "name": "sc-broker",
   "description": "sc-broker key-value and message broker",
-  "version": "7.0.1",
+  "version": "7.0.2",
   "author": {
     "name": "JF Gros-Dubois",
     "email": "grosjona@yahoo.com.au"
@@ -21,7 +21,7 @@
     "expirymanager": "^0.9.3",
     "fleximap": "^1.0.0",
     "ncom": "^2.0.0",
-    "sc-errors": "^1.4.1",
+    "sc-errors": "^2.0.0",
     "uuid": "3.1.0"
   },
   "devDependencies": {
