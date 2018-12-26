@@ -1,15 +1,15 @@
 {
   "name": "sc-broker",
   "description": "sc-broker key-value and message broker",
-  "version": "6.0.0",
+  "version": "7.0.0",
   "author": {
     "name": "JF Gros-Dubois",
-    "email": "flashthink@gmail.com"
+    "email": "grosjona@yahoo.com.au"
   },
   "contributors": [
     {
       "name": "JF Gros-Dubois",
-      "email": "flashthink@gmail.com"
+      "email": "grosjona@yahoo.com.au"
     },
     {
       "name": "wactbprot"
@@ -20,7 +20,7 @@
     "async-stream-emitter": "^1.1.0",
     "expirymanager": "^0.9.3",
     "fleximap": "^1.0.0",
-    "ncom": "^1.0.2",
+    "ncom": "^1.0.3",
     "sc-errors": "^1.4.1",
     "uuid": "3.1.0"
   },

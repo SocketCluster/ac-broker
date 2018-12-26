@@ -12,6 +12,8 @@ const DEFAULT_PORT = 9435;
 const HOST = '127.0.0.1';
 const DEFAULT_CONNECT_RETRY_ERROR_THRESHOLD = 20;
 const DEFAULT_IPC_ACK_TIMEOUT = 10000;
+const DEFAULT_COMMAND_ACK_TIMEOUT = 10000;
+const DEFAULT_PUB_SUB_ACK_TIMEOUT = 4000;
 
 function Server(options) {
   AsyncStreamEmitter.call(this);
@@ -101,10 +103,7 @@ function Server(options) {
       let error = formatError(value.data);
       this.emit('error', {error});
     } else if (value.type === 'brokerMessage') {
-      this.emit('brokerMessage', {
-        brokerId: value.brokerId,
-        data: value.data
-      });
+      this.emit('brokerMessage', {data: value.data});
     } else if (value.type === 'brokerRequest') {
       this.emit('brokerRequest', {
         brokerId: value.brokerId,
@@ -170,7 +169,7 @@ Server.prototype = Object.create(AsyncStreamEmitter.prototype);
 Server.prototype.sendMessageToBroker = function (data) {
   let messagePacket = {
     type: 'masterMessage',
-    data: data
+    data
   };
   this._server.send(messagePacket);
   return Promise.resolve();
@@ -180,7 +179,7 @@ Server.prototype.sendRequestToBroker = function (data) {
   return new Promise((resolve, reject) => {
     let messagePacket = {
       type: 'masterRequest',
-      data: data
+      data
     };
     messagePacket.cid = this._createIPCResponseHandler((err, result) => {
       if (err) {
@@ -211,7 +210,10 @@ function Client(options) {
   AsyncStreamEmitter.call(this);
 
   let secretKey = options.secretKey || null;
-  this._timeout = options.timeout == null ? 10000 : options.timeout;
+  this._commandTimeout = options.commandAckTimeout == null ?
+    DEFAULT_COMMAND_ACK_TIMEOUT : options.commandAckTimeout;
+  this._pubSubTimeout = options.pubSubAckTimeout == null ?
+    DEFAULT_PUB_SUB_ACK_TIMEOUT : options.pubSubAckTimeout;
 
   this.socketPath = options.socketPath;
   this.port = options.port;
@@ -230,16 +232,16 @@ function Client(options) {
 
     let reconnectOptions = options.autoReconnectOptions;
     if (reconnectOptions.initialDelay == null) {
-      reconnectOptions.initialDelay = 200;
+      reconnectOptions.initialDelay = 100;
     }
     if (reconnectOptions.randomness == null) {
       reconnectOptions.randomness = 100;
     }
     if (reconnectOptions.multiplier == null) {
-      reconnectOptions.multiplier = 1.3;
+      reconnectOptions.multiplier = 1.1;
     }
     if (reconnectOptions.maxDelay == null) {
-      reconnectOptions.maxDelay = 1000;
+      reconnectOptions.maxDelay = 500;
     }
     this.autoReconnectOptions = reconnectOptions;
   }
@@ -258,9 +260,9 @@ function Client(options) {
 
   // Only keeps track of the intention of subscription, not the actual state.
   this._subscriptionMap = {};
+  this._pendingSubscriptionMap = {};
   this._commandTracker = {};
   this._pendingBuffer = [];
-  this._pendingSubscriptionBuffer = [];
 
   this.connectAttempts = 0;
   this.pendingReconnect = false;
@@ -357,29 +359,26 @@ function Client(options) {
     return 'n' + this._curID;
   };
 
-  this._flushPendingSubscriptionBuffers = () => {
-    let subBufLen = this._pendingSubscriptionBuffer.length;
-    for (let i = 0; i < subBufLen; i++) {
-      let subCommandData = this._pendingSubscriptionBuffer[i];
-      this._execCommand(subCommandData.command, subCommandData.options);
-    }
-    this._pendingSubscriptionBuffer = [];
+  this._flushPendingSubscriptionMap = () => {
+    Object.values(this._pendingSubscriptionMap).forEach((commandData) => {
+      this._execCommand(commandData.command, commandData.options);
+    });
   };
 
   this._flushPendingBuffers = () => {
-    this._flushPendingSubscriptionBuffers();
+    this._flushPendingSubscriptionMap();
 
-    let bufLen = this._pendingBuffer.length;
-    for (let j = 0; j < bufLen; j++) {
+    let len = this._pendingBuffer.length;
+    for (let j = 0; j < len; j++) {
       let commandData = this._pendingBuffer[j];
       this._execCommand(commandData.command, commandData.options);
     }
     this._pendingBuffer = [];
   };
 
-  this._flushPendingSubscriptionBuffersIfConnected = () => {
+  this._flushPendingSubscriptionMapIfConnected = () => {
     if (this.state === this.CONNECTED) {
-      this._flushPendingSubscriptionBuffers();
+      this._flushPendingSubscriptionMap();
     }
   };
 
@@ -389,38 +388,34 @@ function Client(options) {
     }
   };
 
-  this._prepareAndTrackCommand = (command, callback) => {
+  this._prepareAndTrackCommand = (command, callback, options) => {
     if (command.noAck) {
       callback();
       return;
     }
     command.id = this._genID();
-    let request = {callback};
+    let request = {
+      action: command.action,
+      callback
+    };
     this._commandTracker[command.id] = request;
 
-    request.timeout = setTimeout(() => {
-      let error = new TimeoutError(
-        `Broker Error - The ${command.action} action timed out`
-      );
-      delete request.callback;
-      if (this._commandTracker.hasOwnProperty(command.id)) {
-        delete this._commandTracker[command.id];
-      }
-      callback(error);
-    }, this._timeout);
-  };
+    if (!options || !options.noTimeout) {
+      let timeout = options && options.ackTimeout != null ?
+      options.ackTimeout : this._commandTimeout;
 
-  this._bufferSubscriptionCommand = (command, callback, options) => {
-    this._prepareAndTrackCommand(command, callback);
-    let commandData = {
-      command: command,
-      options: options
-    };
-    this._pendingSubscriptionBuffer.push(commandData);
+      request.timeout = setTimeout(() => {
+        let error = new TimeoutError(
+          `Broker Error - The ${command.action} action timed out`
+        );
+        delete this._commandTracker[command.id];
+        callback(error);
+      }, timeout);
+    }
   };
 
   this._bufferCommand = (command, callback, options) => {
-    this._prepareAndTrackCommand(command, callback);
+    this._prepareAndTrackCommand(command, callback, options);
     // Clone the command argument to prevent the user from modifying the data
     // whilst the command is still pending in the buffer.
     let commandData = {
@@ -445,20 +440,21 @@ function Client(options) {
   };
 
   // Recovers subscriptions after Broker server crash
-  this._resubscribeAll = () => {
+  this._resubscribeAll = async () => {
     let subscribePromises = Object.keys(this._subscriptionMap || {})
-    .map((channel) => {
-      return this.subscribe(channel)
-      .catch((err) => {
+    .map(async (channel) => {
+      try {
+        await this.subscribe(channel);
+      } catch (err) {
         let errorMessage = err.message || err;
         this.emit('error', {
           error: new BrokerError(
             `Failed to resubscribe to broker channel - ${errorMessage}`
           )
         });
-      });
+      }
     });
-    return Promise.all(subscribePromises);
+    await Promise.all(subscribePromises);
   };
 
   this._connectHandler = () => {
@@ -466,17 +462,15 @@ function Client(options) {
       action: 'init',
       secretKey: secretKey
     };
-    let initHandler = (error, brokerInfo) => {
+    let initHandler = async (error, brokerInfo) => {
       if (error) {
         this.emit('error', {error});
       } else {
         this.state = this.CONNECTED;
         this.connectAttempts = 0;
-        this._resubscribeAll()
-        .then(() => {
-          this._flushPendingBuffers();
-          this.emit('ready', brokerInfo);
-        });
+        await this._resubscribeAll();
+        this._flushPendingBuffers();
+        this.emit('ready', brokerInfo);
       }
     };
     this._prepareAndTrackCommand(command, initHandler);
@@ -504,8 +498,6 @@ function Client(options) {
     this.pendingReconnect = false;
     this.pendingReconnectTimeout = null;
     clearTimeout(this._reconnectTimeoutRef);
-    this._pendingBuffer = [];
-    this._pendingSubscriptionBuffer = [];
     this._tryReconnect();
   };
 
@@ -520,6 +512,7 @@ function Client(options) {
     if (options.pubSubBatchDuration != null) {
       execOptions.batch = true;
     }
+    execOptions.ackTimeout = this._pubSubTimeout;
     return execOptions;
   };
 
@@ -565,11 +558,10 @@ Client.prototype.subscribe = function (channel) {
     this._subscriptionMap[channel] = true;
     let command = {
       action: 'subscribe',
-      channel: channel
+      channel
     };
     let callback = (err) => {
       if (err) {
-        delete this._subscriptionMap[channel];
         reject(err);
         return;
       }
@@ -577,64 +569,78 @@ Client.prototype.subscribe = function (channel) {
     };
     let execOptions = this._getPubSubExecOptions();
 
+    let existingCommandData = this._pendingSubscriptionMap[channel];
+    if (existingCommandData) {
+      existingCommandData.callbacks.push(callback);
+    } else {
+      this._pendingSubscriptionMap[channel] = {
+        command,
+        options: execOptions,
+        callbacks: [callback]
+      };
+      this._prepareAndTrackCommand(command, (err, data) => {
+        let commandData = this._pendingSubscriptionMap[channel];
+        if (commandData) {
+          if (err) {
+            delete this._subscriptionMap[channel];
+          }
+          delete this._pendingSubscriptionMap[channel];
+          commandData.callbacks.forEach((callback) => {
+            callback(err, data);
+          });
+        }
+      }, {noTimeout: true});
+    }
+
     this._connect();
-    this._bufferSubscriptionCommand(command, callback, execOptions);
-    this._flushPendingSubscriptionBuffersIfConnected();
+    this._flushPendingSubscriptionMapIfConnected();
   });
 };
 
 Client.prototype.unsubscribe = function (channel) {
   return new Promise((resolve, reject) => {
     delete this._subscriptionMap[channel];
+    delete this._pendingSubscriptionMap[channel];
+
     if (this.state === this.CONNECTED) {
       let command = {
         action: 'unsubscribe',
-        channel: channel
+        channel
       };
-
-      let callback = (err) => {
-        // Unsubscribe can never fail because TCP guarantees
-        // delivery for the life of the connection. If the
-        // connection fails then all subscriptions
-        // will be cleared automatically anyway.
-        resolve();
-      };
-
       let execOptions = this._getPubSubExecOptions();
-      this._bufferSubscriptionCommand(command, callback, execOptions);
-      this._flushPendingSubscriptionBuffersIfConnected();
-    } else {
-      // No need to unsubscribe if the server is disconnected
-      // The server cleans up automatically in case of disconnection
-      resolve();
+      this._execCommand(command, execOptions);
     }
+
+    // Unsubscribe can never fail because TCP guarantees
+    // delivery for the life of the connection. If the
+    // connection fails then all subscriptions
+    // will be cleared automatically anyway.
+    resolve();
   });
 };
 
-Client.prototype.subscriptions = function () {
-  let command = {
-    action: 'subscriptions'
-  };
-
-  let execOptions = this._getPubSubExecOptions();
-  return this._processCommand(command, execOptions);
+Client.prototype.subscriptions = function (includePending) {
+  let subscriptions = Object.keys(this._subscriptionMap);
+  if (includePending) {
+    return subscriptions;
+  }
+  return subscriptions.filter((channel) => {
+    return !this._pendingSubscriptionMap[channel];
+  });
 };
 
-Client.prototype.isSubscribed = function (channel) {
-  let command = {
-    action: 'isSubscribed',
-    channel: channel
-  };
-
-  let execOptions = this._getPubSubExecOptions();
-  return this._processCommand(command, execOptions);
+Client.prototype.isSubscribed = function (channel, includePending) {
+  if (includePending) {
+    return this._subscriptionMap.hasOwnProperty(channel);
+  }
+  return !!this._subscriptionMap[channel] && !this._pendingSubscriptionMap[channel];
 };
 
 Client.prototype.publish = function (channel, value) {
   let command = {
     action: 'publish',
-    channel: channel,
-    value: value,
+    channel,
+    value,
     getValue: 1
   };
 
@@ -668,8 +674,8 @@ Client.prototype.sendMessage = function (data) {
 Client.prototype.set = function (key, value, options) {
   let command = {
     action: 'set',
-    key: key,
-    value: value
+    key,
+    value
   };
 
   if (options && options.getValue) {
@@ -711,7 +717,7 @@ Client.prototype.unexpire = function (keys) {
 Client.prototype.getExpiry = function (key) {
   let command = {
     action: 'getExpiry',
-    key: key
+    key
   };
   return this._processCommand(command);
 };
@@ -723,8 +729,8 @@ Client.prototype.getExpiry = function (key) {
 Client.prototype.add = function (key, value) {
   let command = {
     action: 'add',
-    key: key,
-    value: value
+    key,
+    value
   };
 
   return this._processCommand(command);
@@ -737,8 +743,8 @@ Client.prototype.add = function (key, value) {
 Client.prototype.concat = function (key, value, options) {
   let command = {
     action: 'concat',
-    key: key,
-    value: value
+    key,
+    value
   };
 
   if (options && options.getValue) {
@@ -755,7 +761,7 @@ Client.prototype.concat = function (key, value, options) {
 Client.prototype.get = function (key) {
   let command = {
     action: 'get',
-    key: key
+    key
   };
 
   return this._processCommand(command);
@@ -768,7 +774,7 @@ Client.prototype.get = function (key) {
 Client.prototype.getRange = function (key, options) {
   let command = {
     action: 'getRange',
-    key: key
+    key
   };
 
   if (options) {
@@ -801,7 +807,7 @@ Client.prototype.getAll = function () {
 Client.prototype.count = function (key) {
   let command = {
     action: 'count',
-    key: key
+    key
   };
   return this._processCommand(command);
 };
@@ -860,9 +866,7 @@ Client.prototype.exec = function (query, options) {
   Returns a Promise.
 */
 Client.prototype.query = function (query, data) {
-  let options = {
-    data: data
-  };
+  let options = {data};
   return this.exec(query, options);
 };
 
@@ -873,7 +877,7 @@ Client.prototype.query = function (query, data) {
 Client.prototype.remove = function (key, options) {
   let command = {
     action: 'remove',
-    key: key
+    key
   };
 
   if (options) {
@@ -895,7 +899,7 @@ Client.prototype.remove = function (key, options) {
 Client.prototype.removeRange = function (key, options) {
   let command = {
     action: 'removeRange',
-    key: key
+    key
   };
 
   if (options) {
@@ -938,7 +942,7 @@ Client.prototype.removeAll = function () {
 Client.prototype.splice = function (key, options) {
   let command = {
     action: 'splice',
-    key: key
+    key
   };
 
   if (options) {
@@ -969,7 +973,7 @@ Client.prototype.splice = function (key, options) {
 Client.prototype.pop = function (key, options) {
   let command = {
     action: 'pop',
-    key: key
+    key
   };
 
   if (options) {
@@ -991,7 +995,7 @@ Client.prototype.pop = function (key, options) {
 Client.prototype.hasKey = function (key) {
   let command = {
     action: 'hasKey',
-    key: key
+    key
   };
   return this._processCommand(command);
 };
@@ -1000,44 +1004,42 @@ Client.prototype.hasKey = function (key) {
   end()
   Returns a Promise.
 */
-Client.prototype.end = function () {
+Client.prototype.end = async function () {
   clearTimeout(this._reconnectTimeoutRef);
-  return this.unsubscribe()
-  .then(() => {
-    return new Promise((resolve, reject) => {
-      let disconnectCallback = () => {
-        if (disconnectTimeout) {
-          clearTimeout(disconnectTimeout);
-        }
-        setTimeout(() => {
-          resolve();
-        }, 0);
-        this._socket.removeListener('end', disconnectCallback);
-      };
-
-      let disconnectTimeout = setTimeout(() => {
-        this._socket.removeListener('end', disconnectCallback);
-        let error = new TimeoutError('Disconnection timed out');
-        reject(error);
-      }, this._timeout);
-
-      if (this._socket.connected) {
-        this._socket.on('end', disconnectCallback);
-      } else {
-        disconnectCallback();
+  await this.unsubscribe();
+  return new Promise((resolve, reject) => {
+    let disconnectCallback = () => {
+      if (disconnectTimeout) {
+        clearTimeout(disconnectTimeout);
       }
-      let setDisconnectStatus = () => {
-        this._socket.removeListener('end', setDisconnectStatus);
-        this.state = this.DISCONNECTED;
-      };
-      if (this._socket.connected) {
-        this._socket.on('end', setDisconnectStatus);
-        this._socket.end();
-      } else {
-        this._socket.destroy();
-        this.state = this.DISCONNECTED;
-      }
-    });
+      setTimeout(() => {
+        resolve();
+      }, 0);
+      this._socket.removeListener('end', disconnectCallback);
+    };
+
+    let disconnectTimeout = setTimeout(() => {
+      this._socket.removeListener('end', disconnectCallback);
+      let error = new TimeoutError('Disconnection timed out');
+      reject(error);
+    }, this._commandTimeout);
+
+    if (this._socket.connected) {
+      this._socket.on('end', disconnectCallback);
+    } else {
+      disconnectCallback();
+    }
+    let setDisconnectStatus = () => {
+      this._socket.removeListener('end', setDisconnectStatus);
+      this.state = this.DISCONNECTED;
+    };
+    if (this._socket.connected) {
+      this._socket.on('end', setDisconnectStatus);
+      this._socket.end();
+    } else {
+      this._socket.destroy();
+      this.state = this.DISCONNECTED;
+    }
   });
 };
 

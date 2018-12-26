@@ -183,16 +183,20 @@ SCBroker.create = function (options) {
   return new SCBroker(options);
 };
 
-SCBroker.prototype._init = function (options) {
+SCBroker.prototype._init = async function (options) {
   this.options = options;
   this.instanceId = this.options.instanceId;
   this.secretKey = this.options.secretKey;
   this.ipcAckTimeout = this.options.ipcAckTimeout || DEFAULT_IPC_ACK_TIMEOUT;
 
   let runResult = this.run();
-  Promise.resolve(runResult)
-  .then(comServerListen)
-  .catch(exitWithError);
+  try {
+    await Promise.resolve(runResult);
+  } catch (err) {
+    exitWithError(err);
+    return;
+  }
+  comServerListen();
 };
 
 SCBroker.prototype.run = function () {};
@@ -200,8 +204,7 @@ SCBroker.prototype.run = function () {};
 SCBroker.prototype.sendMessageToMaster = function (data) {
   let messagePacket = {
     type: 'brokerMessage',
-    brokerId: this.id,
-    data: data
+    data
   };
   process.send(messagePacket);
   return Promise.resolve();
@@ -212,7 +215,7 @@ SCBroker.prototype.sendRequestToMaster = function (data) {
     let messagePacket = {
       type: 'brokerRequest',
       brokerId: this.id,
-      data: data
+      data
     };
     messagePacket.cid = createIPCResponseHandler(this.ipcAckTimeout, (err, result) => {
       if (err) {
@@ -497,16 +500,6 @@ let actions = {
     send(socket, {id: command.id, type: 'response', action: 'unsubscribe', channel: command.channel}, pubSubOptions);
   },
 
-  isSubscribed: function (command, socket) {
-    let result = hasListener(socket, command.channel);
-    send(socket, {id: command.id, type: 'response', action: 'isSubscribed', channel: command.channel, value: result}, pubSubOptions);
-  },
-
-  subscriptions: function (command, socket) {
-    let result = getSubscriptions(socket);
-    send(socket, {id: command.id, type: 'response', action: 'subscriptions', value: result}, pubSubOptions);
-  },
-
   publish: function (command, socket) {
     scBroker.publish(command.channel, command.value);
     let response = {id: command.id, type: 'response', action: 'publish', channel: command.channel};
@@ -635,7 +628,7 @@ process.on('message', function (m) {
   if (m) {
     if (m.type === 'masterMessage') {
       if (scBroker) {
-        scBroker.emit('masterMessage', m.data);
+        scBroker.emit('masterMessage', {data: m.data});
       } else {
         let errorMessage = `Cannot send message to broker with id ${BROKER_ID} ` +
           'because the broker was not instantiated';
@@ -650,7 +643,7 @@ process.on('message', function (m) {
             process.send({
               type: 'brokerResponse',
               brokerId: scBroker.id,
-              data: data,
+              data,
               rid: m.cid
             });
           },

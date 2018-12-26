@@ -5,6 +5,7 @@ let conf = {
   port: 9002,
   timeout: 2000,
   ipcAckTimeout: 1000,
+  pubSubAckTimeout: 2000,
   brokerOptions: {
     ipcAckTimeout: 1000
   }
@@ -67,15 +68,14 @@ describe('sc-broker failure handling and recovery', function () {
     let receivedCount = 0;
 
     let finish = () => {
-      assert.equal(receivedCount, pubCount);
+      assert.equal(receivedCount >= pubCount, true);
       done();
     };
 
     let handleMessage = (channel, data) => {
       if (channel === 'foo') {
         receivedCount++;
-
-        if (receivedCount >= pubTargetNum) {
+        if (data === 'hello ' + (pubTargetNum - 1)) {
           console.log('receivedCount vs pubTargetNum:', receivedCount, pubTargetNum);
           finish();
         }
