@@ -56,6 +56,7 @@ describe('sc-broker failure handling and recovery', function () {
     testFinished = true;
     client.closeListener('error');
     server.closeListener('error');
+    client.end();
     server.destroy();
   });
 

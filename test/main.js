@@ -49,9 +49,10 @@ describe('sc-broker client', function () {
   });
 
   after('shut down server afterwards', async function () {
-    server.destroy();
     client.closeListener('error');
     server.closeListener('error');
+    client.end();
+    server.destroy();
   });
 
   describe('sc-broker#executeCommandWhenClientIsDisconnected', function () {
@@ -962,7 +963,6 @@ describe('sc-broker client', function () {
 
   describe('client#end', function () {
     it('should not reject', function () {
-      let client = scBroker.createClient(conf);
       return client.end();
     });
   });

@@ -270,7 +270,10 @@ function Client(options) {
 
   let createSocket = () => {
     if (this._socket) {
-      this._socket.removeAllListeners();
+      this._socket.removeAllListeners('connect');
+      this._socket.removeAllListeners('message');
+      this._socket.removeListener('close', this._handleDisconnection);
+      this._socket.removeListener('end', this._handleDisconnection);
     }
 
     this._socket = new ComSocket();
@@ -290,8 +293,8 @@ function Client(options) {
         this.emit('error', {error});
       }
     });
-    this._socket.on('close', handleDisconnection);
-    this._socket.on('end', handleDisconnection);
+    this._socket.on('close', this._handleDisconnection);
+    this._socket.on('end', this._handleDisconnection);
     this._socket.on('message', (packet) => {
       let id = packet.id;
       let rawError = packet.error;
@@ -493,7 +496,9 @@ function Client(options) {
     }
   };
 
-  let handleDisconnection = () => {
+  this._handleDisconnection = () => {
+    this._socket.removeListener('close', this._handleDisconnection);
+    this._socket.removeListener('end', this._handleDisconnection);
     this.state = this.DISCONNECTED;
     this.pendingReconnect = false;
     this.pendingReconnectTimeout = null;
@@ -1008,36 +1013,36 @@ Client.prototype.end = async function () {
   clearTimeout(this._reconnectTimeoutRef);
   await this.unsubscribe();
   return new Promise((resolve, reject) => {
+    let socket = this._socket;
     let disconnectCallback = () => {
+      this.state = this.DISCONNECTED;
       if (disconnectTimeout) {
         clearTimeout(disconnectTimeout);
       }
+      socket.removeListener('end', disconnectCallback);
+      socket.removeListener('close', disconnectCallback);
+      socket.destroy();
       setTimeout(() => {
         resolve();
       }, 0);
-      this._socket.removeListener('end', disconnectCallback);
     };
 
+    socket.removeListener('close', this._handleDisconnection);
+    socket.removeListener('end', this._handleDisconnection);
+
     let disconnectTimeout = setTimeout(() => {
-      this._socket.removeListener('end', disconnectCallback);
+      socket.removeListener('end', disconnectCallback);
+      socket.removeListener('close', disconnectCallback);
       let error = new TimeoutError('Disconnection timed out');
       reject(error);
     }, this._commandTimeout);
 
-    if (this._socket.connected) {
-      this._socket.on('end', disconnectCallback);
+    if (socket.connected) {
+      socket.on('end', disconnectCallback);
+      socket.on('close', disconnectCallback);
+      socket.end();
     } else {
       disconnectCallback();
-    }
-    let setDisconnectStatus = () => {
-      this._socket.removeListener('end', setDisconnectStatus);
-      this.state = this.DISCONNECTED;
-    };
-    if (this._socket.connected) {
-      this._socket.on('end', setDisconnectStatus);
-      this._socket.end();
-    } else {
-      this._socket.destroy();
       this.state = this.DISCONNECTED;
     }
   });
