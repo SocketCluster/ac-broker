@@ -1,5 +1,5 @@
 const _ = require('underscore');
-const scBroker = require('../index');
+const agBroker = require('../index');
 const assert = require('assert');
 
 let conf = {
@@ -28,17 +28,17 @@ function wait(duration) {
 let server;
 let client;
 
-describe('sc-broker client', function () {
+describe('ag-broker client', function () {
 
   before('run the server before start', async function () {
-    server = scBroker.createServer(conf);
+    server = agBroker.createServer(conf);
     (async () => {
       for await (let {error} of server.listener('error')) {
         console.log('SERVER ERROR:', error);
       }
     })();
 
-    client = scBroker.createClient(conf);
+    client = agBroker.createClient(conf);
     (async () => {
       for await (let {error} of client.listener('error')) {
         console.log('CLIENT ERROR:', error);
@@ -55,7 +55,7 @@ describe('sc-broker client', function () {
     server.destroy();
   });
 
-  describe('sc-broker#executeCommandWhenClientIsDisconnected', function () {
+  describe('ag-broker#executeCommandWhenClientIsDisconnected', function () {
     it('should be able to execute getAll action if client starts out disconnected', function () {
       return client.end()
       .then(() => {
@@ -85,21 +85,21 @@ describe('sc-broker client', function () {
     });
   });
 
-  describe('sc-broker#createServer', function () {
+  describe('ag-broker#createServer', function () {
     it('should provide server.destroy', function (done) {
       assert(_.isFunction(server.destroy), true);
       done();
     });
   });
 
-  describe('sc-broker#createClient', function () {
-    it('should provide scBroker.createClient', function (done) {
-      assert.equal(_.isFunction(scBroker.createClient), true);
+  describe('ag-broker#createClient', function () {
+    it('should provide agBroker.createClient', function (done) {
+      assert.equal(_.isFunction(agBroker.createClient), true);
       done();
     });
   });
 
-  describe('sc-broker#sendRequestToBroker', function () {
+  describe('ag-broker#sendRequestToBroker', function () {
     it('should be able to send a request to the broker and get a response', function () {
       return server.sendRequestToBroker({subject: 'world'})
       .then((data) => {
@@ -135,7 +135,7 @@ describe('sc-broker client', function () {
     });
   });
 
-  describe('sc-broker#sendMessageToBroker', function () {
+  describe('ag-broker#sendMessageToBroker', function () {
     it('should be able to send data to the broker and not timeout if a broker does not respond', function () {
       return server.sendMessageToBroker({doNothing: true});
     });

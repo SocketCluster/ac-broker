@@ -144,18 +144,18 @@ function handleMasterResponse(message) {
   }
 }
 
-let scBroker;
+let agBroker;
 
-function SCBroker(options) {
+function AGBroker(options) {
   AsyncStreamEmitter.call(this);
 
-  if (scBroker) {
+  if (agBroker) {
     let err = new BrokerError('Attempted to instantiate a broker which has already been instantiated');
     throw err;
   }
 
   options = options || {};
-  scBroker = this;
+  agBroker = this;
 
   this.id = BROKER_ID;
   this.debugPort = DEBUG_PORT;
@@ -177,13 +177,13 @@ function SCBroker(options) {
   this._init(brokerInitOptions);
 }
 
-SCBroker.prototype = Object.create(AsyncStreamEmitter.prototype);
+AGBroker.prototype = Object.create(AsyncStreamEmitter.prototype);
 
-SCBroker.create = function (options) {
-  return new SCBroker(options);
+AGBroker.create = function (options) {
+  return new AGBroker(options);
 };
 
-SCBroker.prototype._init = async function (options) {
+AGBroker.prototype._init = async function (options) {
   this.options = options;
   this.instanceId = this.options.instanceId;
   this.secretKey = this.options.secretKey;
@@ -199,9 +199,9 @@ SCBroker.prototype._init = async function (options) {
   comServerListen();
 };
 
-SCBroker.prototype.run = function () {};
+AGBroker.prototype.run = function () {};
 
-SCBroker.prototype.sendMessageToMaster = function (data) {
+AGBroker.prototype.sendMessageToMaster = function (data) {
   let messagePacket = {
     type: 'brokerMessage',
     data
@@ -210,7 +210,7 @@ SCBroker.prototype.sendMessageToMaster = function (data) {
   return Promise.resolve();
 };
 
-SCBroker.prototype.sendRequestToMaster = function (data) {
+AGBroker.prototype.sendRequestToMaster = function (data) {
   return new Promise((resolve, reject) => {
     let messagePacket = {
       type: 'brokerRequest',
@@ -228,11 +228,11 @@ SCBroker.prototype.sendRequestToMaster = function (data) {
   });
 };
 
-SCBroker.prototype.exec = function (query, baseKey) {
+AGBroker.prototype.exec = function (query, baseKey) {
   return exec(query, baseKey);
 };
 
-SCBroker.prototype.publish = function (channel, message) {
+AGBroker.prototype.publish = function (channel, message) {
   let sock;
   let socketSubscriptions = Object.values(subscriptions || {});
   socketSubscriptions.forEach((subs) => {
@@ -243,7 +243,7 @@ SCBroker.prototype.publish = function (channel, message) {
   });
 };
 
-SCBroker.prototype._passThroughMiddleware = function (command, socket, cb) {
+AGBroker.prototype._passThroughMiddleware = function (command, socket, cb) {
   let action = command.action;
   let callbackInvoked = false;
 
@@ -271,7 +271,7 @@ SCBroker.prototype._passThroughMiddleware = function (command, socket, cb) {
   }
 }
 
-SCBroker.prototype.addMiddleware = function (type, middleware) {
+AGBroker.prototype.addMiddleware = function (type, middleware) {
   if (!this._middleware[type]) {
     throw new InvalidArgumentsError(`Middleware type "${type}" is not supported`);
   }
@@ -279,7 +279,7 @@ SCBroker.prototype.addMiddleware = function (type, middleware) {
   this._middleware[type].push(middleware);
 }
 
-SCBroker.prototype.removeMiddleware = function (type, middleware) {
+AGBroker.prototype.removeMiddleware = function (type, middleware) {
   let middlewareFunctions = this._middleware[type];
   if (!middlewareFunctions) {
     throw new InvalidArgumentsError(`Middleware type "${type}" is not supported`);
@@ -301,7 +301,7 @@ let actions = {
       pid: process.pid
     };
     let result = {id: command.id, type: 'response', action: 'init', value: brokerInfo};
-    if (scBroker.secretKey == null || command.secretKey === scBroker.secretKey) {
+    if (agBroker.secretKey == null || command.secretKey === agBroker.secretKey) {
       initialized[socket.id] = {};
     } else {
       let err = new BrokerError('Invalid password was supplied to the broker');
@@ -311,7 +311,7 @@ let actions = {
   },
 
   set: function (command, socket) {
-    let result = scBroker.dataMap.set(command.key, command.value);
+    let result = agBroker.dataMap.set(command.key, command.value);
     let response = {id: command.id, type: 'response', action: 'set'};
     if (command.getValue) {
       response.value = result;
@@ -320,49 +320,49 @@ let actions = {
   },
 
   expire: function (command, socket) {
-    scBroker.dataExpirer.expire(command.keys, command.value);
+    agBroker.dataExpirer.expire(command.keys, command.value);
     let response = {id: command.id, type: 'response', action: 'expire'};
     send(socket, response);
   },
 
   unexpire: function (command, socket) {
-    scBroker.dataExpirer.unexpire(command.keys);
+    agBroker.dataExpirer.unexpire(command.keys);
     let response = {id: command.id, type: 'response', action: 'unexpire'};
     send(socket, response);
   },
 
   getExpiry: function (command, socket) {
-    let response = {id: command.id, type: 'response', action: 'getExpiry', value: scBroker.dataExpirer.getExpiry(command.key)};
+    let response = {id: command.id, type: 'response', action: 'getExpiry', value: agBroker.dataExpirer.getExpiry(command.key)};
     send(socket, response);
   },
 
   get: function (command, socket) {
-    let result = scBroker.dataMap.get(command.key);
+    let result = agBroker.dataMap.get(command.key);
     send(socket, {id: command.id, type: 'response', action: 'get', value: result});
   },
 
   getRange: function (command, socket) {
-    let result = scBroker.dataMap.getRange(command.key, command.fromIndex, command.toIndex);
+    let result = agBroker.dataMap.getRange(command.key, command.fromIndex, command.toIndex);
     send(socket, {id: command.id, type: 'response', action: 'getRange', value: result});
   },
 
   getAll: function (command, socket) {
-    send(socket, {id: command.id, type: 'response', action: 'getAll', value: scBroker.dataMap.getAll()});
+    send(socket, {id: command.id, type: 'response', action: 'getAll', value: agBroker.dataMap.getAll()});
   },
 
   count: function (command, socket) {
-    let result = scBroker.dataMap.count(command.key);
+    let result = agBroker.dataMap.count(command.key);
     send(socket, {id: command.id, type: 'response', action: 'count', value: result});
   },
 
   add: function (command, socket) {
-    let result = scBroker.dataMap.add(command.key, command.value);
+    let result = agBroker.dataMap.add(command.key, command.value);
     let response = {id: command.id, type: 'response', action: 'add', value: result};
     send(socket, response);
   },
 
   concat: function (command, socket) {
-    let result = scBroker.dataMap.concat(command.key, command.value);
+    let result = agBroker.dataMap.concat(command.key, command.value);
     let response = {id: command.id, type: 'response', action: 'concat'};
     if (command.getValue) {
       response.value = result;
@@ -382,7 +382,7 @@ let actions = {
   exec: function (command, socket) {
     let ret = {id: command.id, type: 'response', action: 'exec'};
     try {
-      let result = scBroker.exec(command.value, command.baseKey);
+      let result = agBroker.exec(command.value, command.baseKey);
       if (result !== undefined) {
         ret.value = result;
       }
@@ -401,7 +401,7 @@ let actions = {
   },
 
   remove: function (command, socket) {
-    let result = scBroker.dataMap.remove(command.key);
+    let result = agBroker.dataMap.remove(command.key);
     if (!command.noAck) {
       let response = {id: command.id, type: 'response', action: 'remove'};
       if (command.getValue) {
@@ -412,7 +412,7 @@ let actions = {
   },
 
   removeRange: function (command, socket) {
-    let result = scBroker.dataMap.removeRange(command.key, command.fromIndex, command.toIndex);
+    let result = agBroker.dataMap.removeRange(command.key, command.fromIndex, command.toIndex);
     if (!command.noAck) {
       let response = {id: command.id, type: 'response', action: 'removeRange'};
       if (command.getValue) {
@@ -423,7 +423,7 @@ let actions = {
   },
 
   removeAll: function (command, socket) {
-    scBroker.dataMap.removeAll();
+    agBroker.dataMap.removeAll();
     if (!command.noAck) {
       send(socket, {id: command.id, type: 'response', action: 'removeAll'});
     }
@@ -441,7 +441,7 @@ let actions = {
       }
       args.pop();
     }
-    let result = scBroker.dataMap.splice.apply(scBroker.dataMap, args);
+    let result = agBroker.dataMap.splice.apply(agBroker.dataMap, args);
     if (!command.noAck) {
       let response = {id: command.id, type: 'response', action: 'splice'};
       if (command.getValue) {
@@ -452,7 +452,7 @@ let actions = {
   },
 
   pop: function (command, socket) {
-    let result = scBroker.dataMap.pop(command.key);
+    let result = agBroker.dataMap.pop(command.key);
     if (!command.noAck) {
       let response = {id: command.id, type: 'response', action: 'pop'};
       if (command.getValue) {
@@ -463,14 +463,14 @@ let actions = {
   },
 
   hasKey: function (command, socket) {
-    send(socket, {id: command.id, type: 'response', action: 'hasKey', value: scBroker.dataMap.hasKey(command.key)});
+    send(socket, {id: command.id, type: 'response', action: 'hasKey', value: agBroker.dataMap.hasKey(command.key)});
   },
 
   subscribe: function (command, socket) {
     let hasListener = anyHasListener(command.channel);
     addListener(socket, command.channel);
     if (!hasListener) {
-      scBroker.emit('subscribe', {
+      agBroker.emit('subscribe', {
         channel: command.channel
       });
     }
@@ -482,7 +482,7 @@ let actions = {
       removeListener(socket, command.channel);
       let hasListener = anyHasListener(command.channel);
       if (!hasListener) {
-        scBroker.emit('unsubscribe', {
+        agBroker.emit('unsubscribe', {
           channel: command.channel
         });
       }
@@ -491,7 +491,7 @@ let actions = {
       let len = channels.length;
       for (let i = 0; i < len; i++) {
         if (!anyHasListener(channels[i])) {
-          scBroker.emit('unsubscribe', {
+          agBroker.emit('unsubscribe', {
             channel: channels[i]
           });
         }
@@ -501,12 +501,12 @@ let actions = {
   },
 
   publish: function (command, socket) {
-    scBroker.publish(command.channel, command.value);
+    agBroker.publish(command.channel, command.value);
     let response = {id: command.id, type: 'response', action: 'publish', channel: command.channel};
     if (command.getValue) {
       response.value = command.value;
     }
-    scBroker.emit('publish', {
+    agBroker.emit('publish', {
       channel: command.channel,
       data: command.value
     });
@@ -514,7 +514,7 @@ let actions = {
   },
 
   sendRequest: function (command, socket) {
-    scBroker.emit('request', {
+    agBroker.emit('request', {
       data: command.value,
       end: (data) => {
         send(socket, {
@@ -536,7 +536,7 @@ let actions = {
   },
 
   sendMessage: function (command, socket) {
-    scBroker.emit('message', {data: command.value});
+    agBroker.emit('message', {data: command.value});
   }
 };
 
@@ -560,7 +560,7 @@ let handleConnection = function (sock) {
 
   sock.on('message', (command) => {
     if (initialized.hasOwnProperty(sock.id) || command.action === 'init') {
-      scBroker._passThroughMiddleware(command, sock, (err) => {
+      agBroker._passThroughMiddleware(command, sock, (err) => {
         try {
           if (err) {
             throw err;
@@ -592,7 +592,7 @@ let handleConnection = function (sock) {
     let len = channels.length;
     for (let i = 0; i < len; i++) {
       if (!anyHasListener(channels[i])) {
-        scBroker.emit('unsubscribe', {
+        agBroker.emit('unsubscribe', {
           channel: channels[i]
         });
       }
@@ -627,8 +627,8 @@ let comServerListen = function () {
 process.on('message', function (m) {
   if (m) {
     if (m.type === 'masterMessage') {
-      if (scBroker) {
-        scBroker.emit('masterMessage', {data: m.data});
+      if (agBroker) {
+        agBroker.emit('masterMessage', {data: m.data});
       } else {
         let errorMessage = `Cannot send message to broker with id ${BROKER_ID} ` +
           'because the broker was not instantiated';
@@ -636,13 +636,13 @@ process.on('message', function (m) {
         sendErrorToMaster(err);
       }
     } else if (m.type === 'masterRequest') {
-      if (scBroker) {
-        scBroker.emit('masterRequest', {
+      if (agBroker) {
+        agBroker.emit('masterRequest', {
           data: m.data,
           end: (data) => {
             process.send({
               type: 'brokerResponse',
-              brokerId: scBroker.id,
+              brokerId: agBroker.id,
               data,
               rid: m.cid
             });
@@ -650,7 +650,7 @@ process.on('message', function (m) {
           error: (err) => {
             process.send({
               type: 'brokerResponse',
-              brokerId: scBroker.id,
+              brokerId: agBroker.id,
               error: scErrors.dehydrateError(err, true),
               rid: m.cid
             });
@@ -695,4 +695,4 @@ setInterval(() => {
 
 process.on('uncaughtException', exitWithError);
 
-module.exports = SCBroker;
+module.exports = AGBroker;

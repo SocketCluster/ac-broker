@@ -1,7 +1,7 @@
-module.exports = function (scBroker) {
+module.exports = function (agBroker) {
   let hasSeenAllowOnceChannelAlready = false;
 
-  scBroker.addMiddleware(scBroker.MIDDLEWARE_SUBSCRIBE, async (req) => {
+  agBroker.addMiddleware(agBroker.MIDDLEWARE_SUBSCRIBE, async (req) => {
     if (req.channel === 'allowOnce') {
       if (hasSeenAllowOnceChannelAlready) {
         let onlyOnceError = new Error('Can only subscribe once to the allowOnce channel')
@@ -19,7 +19,7 @@ module.exports = function (scBroker) {
     }
   });
 
-  scBroker.addMiddleware(scBroker.MIDDLEWARE_PUBLISH_IN, async (req) => {
+  agBroker.addMiddleware(agBroker.MIDDLEWARE_PUBLISH_IN, async (req) => {
     if (req.channel === 'silentChannel') {
       throw new Error('silent channel');
     } else if (req.command.value === 'test message') {
@@ -35,10 +35,10 @@ module.exports = function (scBroker) {
   let badMiddleware = async (req) => {
     throw new Error('This code should be unreachable!');
   };
-  scBroker.addMiddleware(scBroker.MIDDLEWARE_SUBSCRIBE, badMiddleware);
-  scBroker.addMiddleware(scBroker.MIDDLEWARE_PUBLISH_IN, badMiddleware);
-  scBroker.removeMiddleware(scBroker.MIDDLEWARE_SUBSCRIBE, badMiddleware);
-  scBroker.removeMiddleware(scBroker.MIDDLEWARE_PUBLISH_IN, badMiddleware);
+  agBroker.addMiddleware(agBroker.MIDDLEWARE_SUBSCRIBE, badMiddleware);
+  agBroker.addMiddleware(agBroker.MIDDLEWARE_PUBLISH_IN, badMiddleware);
+  agBroker.removeMiddleware(agBroker.MIDDLEWARE_SUBSCRIBE, badMiddleware);
+  agBroker.removeMiddleware(agBroker.MIDDLEWARE_PUBLISH_IN, badMiddleware);
 };
 
 function wait(duration) {

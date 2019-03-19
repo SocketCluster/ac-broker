@@ -1,7 +1,7 @@
 {
-  "name": "sc-broker",
-  "description": "sc-broker key-value and message broker",
-  "version": "7.0.2",
+  "name": "ag-broker",
+  "description": "ag-broker key-value and message broker",
+  "version": "1.0.0",
   "author": {
     "name": "JF Gros-Dubois",
     "email": "grosjona@yahoo.com.au"
@@ -39,7 +39,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git://github.com/SocketCluster/sc-broker.git"
+    "url": "git://github.com/SocketCluster/ag-broker.git"
   },
   "main": "index",
   "engines": {

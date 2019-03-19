@@ -1,10 +1,10 @@
 // To test with .mjs (ES6 modules)
 
-import SCBroker from '../../scbroker';
+import AGBroker from '../../agbroker';
 import scErrors from 'sc-errors';
 import addMiddleware from './middleware';
 
-class BrokerControllerStub extends SCBroker {
+class BrokerControllerStub extends AGBroker {
   run() {
     console.log('Start broker');
     addMiddleware(this);

@@ -1,8 +1,8 @@
-const SCBroker = require('../../scbroker');
+const AGBroker = require('../../agbroker');
 const scErrors = require('sc-errors');
 const addMiddleware = require('./middleware');
 
-class BrokerControllerStub extends SCBroker {
+class BrokerControllerStub extends AGBroker {
   run() {
     console.log('Start broker');
     addMiddleware(this);

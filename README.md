@@ -1,13 +1,13 @@
-sc-broker
+ag-broker
 ======
 
-*scBroker* is a lightweight key-value store and message broker.
+*agBroker* is a lightweight key-value store and message broker.
 It is written entirely in node.js for maximum portability.
 
 ## Installation
 
 ```bash
-npm install sc-broker
+npm install ag-broker
 ```
 
 ## Overview
@@ -15,25 +15,25 @@ npm install sc-broker
 To use it call:
 
 ```js
-const scBroker = require('sc-broker');
+const agBroker = require('ag-broker');
 ```
 
-Firstly, launch a new *scBroker* server. If you're using the node cluster module,
-you might want to launch the *scBroker* server once from the master process and
-then interact with it using *scBroker* clients.
+Firstly, launch a new *agBroker* server. If you're using the node cluster module,
+you might want to launch the *agBroker* server once from the master process and
+then interact with it using *agBroker* clients.
 
 ## Server
 
 To launch the **server**, use:
 
 ```js
-let dataServer = scBroker.createServer({port: 9000, secretKey: 'mySecretKey'})
+let dataServer = agBroker.createServer({port: 9000, secretKey: 'mySecretKey'})
 ```
 
 The ```secretKey``` argument is optional; you should use it if you want to
 restrict access to the server. If you're running a node cluster, you may want
 to use a random key and distribute it to all the workers so that only your
-application can interact with the *scBroker* server.
+application can interact with the *agBroker* server.
 
 Once the server is setup, you should create clients to interact with it.
 
@@ -43,12 +43,12 @@ This can be done in the following way:
 
 ```js
 let conf = {port: 9000}
-  , server = scBroker.createServer(conf);
+  , server = agBroker.createServer(conf);
 
 (async () => {
   await server.listener('ready').once();
   console.log('Server ready, create client');
-  let client = scBroker.createClient(conf);
+  let client = agBroker.createClient(conf);
   // Do client stuff...
 })();
 ```
@@ -63,7 +63,7 @@ server.destroy();
 To create a **client** use:
 
 ```js
-let dataClient = scBroker.createClient({port: 9000, secretKey: 'mySecretKey'});
+let dataClient = agBroker.createClient({port: 9000, secretKey: 'mySecretKey'});
 ```
 
 The ```port``` and ```secretKey``` must match those supplied to the
@@ -72,8 +72,8 @@ createServer function.
 ### Client methods
 
 The client exposes the following methods:
-(Please see the [section on keys ](https://github.com/SocketCluster/sc-broker#keys) to
-see how you can use keys in *scBroker*.
+(Please see the [section on keys ](https://github.com/SocketCluster/ag-broker#keys) to
+see how you can use keys in *agBroker*.
 
 
 #### exec
@@ -82,9 +82,9 @@ see how you can use keys in *scBroker*.
 exec(code,[ data])
 ```
 Run a special JavaScript function
-declaration (code) as a query *on the scBroker server*. This function declaration
+declaration (code) as a query *on the agBroker server*. This function declaration
 accepts the DataMap as a parameter.
-This is the most important function in *scBroker*, all the other functions are
+This is the most important function in *agBroker*, all the other functions are
 basically utility functions to make things quicker. Using exec() offers the
 most flexibility. Returns a Promise; on success resolves to the return value of the query function.
 
@@ -112,7 +112,7 @@ client.exec(queryFn)
 **Note**
 
 The *query functions* are **not** regular functions. Query functions are
-executed remotely (on the *scBroker* server), therefore, you cannot access
+executed remotely (on the *agBroker* server), therefore, you cannot access
 variables from the outer parent scope while inside them.
 
 To pass data from the current process to use inside your query functions, you
@@ -172,7 +172,7 @@ to *return* the removed section as an *argument to the Promise*. Returns a Promi
 ```js
 removeAll()
 ```
-Clear *scBroker* *completely*. Returns a Promise.
+Clear *agBroker* *completely*. Returns a Promise.
 
 #### splice
 
@@ -223,7 +223,7 @@ included. Returns a Promise.
 ```js
 getAll()
 ```
-Get all the values in *scBroker*. Returns a Promise.
+Get all the values in *agBroker*. Returns a Promise.
 
 #### count
 
@@ -234,7 +234,7 @@ Count the number of elements at ```keyChain```. Returns a Promise.
 
 ## publish subscribe
 
-*scBroker* provides [publish and subscribe](http://redis.io/topics/pubsub)
+*agBroker* provides [publish and subscribe](http://redis.io/topics/pubsub)
  functionality.
 
 
@@ -243,12 +243,12 @@ Count the number of elements at ```keyChain```. Returns a Promise.
 ```js
 subscribe(channel)
 ```
-Watch a ```channel``` on *scBroker*. This is the *scBroker* equivalent to
+Watch a ```channel``` on *agBroker*. This is the *agBroker* equivalent to
 [Redis' ```subscribe()```](http://redis.io/commands/subscribe). When an event
 happens on any watched channel, you can handle it using
 ```js
 (async () => {
-  for await (let {channel, data} of scBrokerClient.listener('message')) {
+  for await (let {channel, data} of agBrokerClient.listener('message')) {
     // ...
   }
 })();
@@ -268,16 +268,16 @@ will unsubscribe from all channels. Returns a Promise.
 ```js
 on(event, listener)
 ```
-Listen to events on *scBroker*, you should listen to the 'message' event to handle
+Listen to events on *agBroker*, you should listen to the 'message' event to handle
 messages from subscribed channels. Events are:
 
-* ```'ready'```: Triggers when *scBroker* is initialized and connected. You often
-    don't need to wait for that event though. The *scBroker* client will buffer
-    actions until the *scBroker* server ready.
+* ```'ready'```: Triggers when *agBroker* is initialized and connected. You often
+    don't need to wait for that event though. The *agBroker* client will buffer
+    actions until the *agBroker* server ready.
 * ```'exit'``` This event carries two arguments to it's listener: ```code```
-    and ```signal```. It gets triggered when the *scBroker* **server** process
+    and ```signal```. It gets triggered when the *agBroker* **server** process
     dies.
-* ```'connect_failed'``` This happens if the *scBroker* **client** fails to
+* ```'connect_failed'``` This happens if the *agBroker* **client** fails to
     connect to the server after the maximum number of retries have been
     attempted.
 * ```'message'``` Captures data published to a channel which the client is
@@ -301,16 +301,16 @@ Returns a Promise.
 After starting the server (*server.js*):
 
 ```js
-const scBroker = require('sc-broker');
-let dss = scBroker.createServer({port: 9000});
+const agBroker = require('ag-broker');
+let dss = agBroker.createServer({port: 9000});
 ```
 
 a first client (*client1.js*) can subscribe to channel ```foo``` and listen
 to ```messages```:
 
 ```js
-const scBroker = require('sc-broker');
-let dc = scBroker.createClient({port: 9000});
+const agBroker = require('ag-broker');
+let dc = agBroker.createClient({port: 9000});
 let ch = 'foo';
 let onMsgFn = function (ch, data) {
   console.log('message on channel ' + ch);
@@ -336,8 +336,8 @@ If a second client (*client2.js*) publishes a message, the first client will
 execute the ```onMsgFn``` function:
 
 ```js
-const scBroker = require('sc-broker');
-let dc = scBroker.createClient({port: 9000});
+const agBroker = require('ag-broker');
+let dc = agBroker.createClient({port: 9000});
 let data = {a: 'b'};
 let ch = 'foo';
 
@@ -353,7 +353,7 @@ dc.publish(ch,data)
 
 ## Keys
 
-*scBroker* is very flexible with how you can use keys. It lets you set key chains
+*agBroker* is very flexible with how you can use keys. It lets you set key chains
 of any dimension without having to manually create each link in the chain.
 
 A key chain is an array of keys - Each subsequent key in the chain is a child
@@ -366,11 +366,11 @@ The key chain ```['this', 'is', 'a', 'key']``` would reference the number
 ```123```. The key chain ```['this', 'is']``` would reference the object
 ```{'a': {'key': 123}}```, etc.
 
-When you start, *scBroker* will be empty, but this code is perfectly valid:
+When you start, *agBroker* will be empty, but this code is perfectly valid:
 ```js
 dataClient.set(['this', 'is', 'a', 'deep', 'key'], 'Hello world');
 ```
-In this case, *scBroker* will *create* the necessary key chain and set the
+In this case, *agBroker* will *create* the necessary key chain and set the
 bottom-level 'key' to 'Hello World'.
 If you were to call:
 ```js
@@ -383,7 +383,7 @@ The above would output:
 {deep:{key:'Hello world'}}
 ```
 
-*scBroker* generally doesn't restrict you from doing anything you want. Following
+*agBroker* generally doesn't restrict you from doing anything you want. Following
 from the previous example, it is perfectly OK to call this:
 ```js
 dataClient.add(['this', 'is', 'a'], 'foo');
@@ -392,7 +392,7 @@ In this case, the key chain ```['this', 'is', 'a']``` would evaluate to:
 ```js
 {0:'foo', deep:{key:'Hello world'}}
 ```
-In this case, *scBroker* will add the value at the next numeric index in the
+In this case, *agBroker* will add the value at the next numeric index in the
 specified key path (which in this case is 0).
 
 You can access numerically-indexed values like this:
@@ -411,7 +411,7 @@ You can also add entire JSON-compatible objects as value.
 
 ## Tests
 
-To run tests, go to the sc-broker module directory then run:
+To run tests, go to the ag-broker module directory then run:
 
 ```bash
 npm test

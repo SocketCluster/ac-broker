@@ -1,4 +1,4 @@
-const scBroker = require('../index');
+const agBroker = require('../index');
 const assert = require('assert');
 
 let conf = {
@@ -21,7 +21,7 @@ let server;
 let client;
 let testFinished = false;
 
-describe('sc-broker failure handling and recovery', function () {
+describe('ag-broker failure handling and recovery', function () {
 
   before('run the server before start', async function () {
     // Set up the server to auto-relaunch on crash
@@ -29,7 +29,7 @@ describe('sc-broker failure handling and recovery', function () {
       if (testFinished) {
         return;
       }
-      server = scBroker.createServer(conf);
+      server = agBroker.createServer(conf);
       (async () => {
         for await (let {error} of server.listener('error')) {
           console.error('server error:', error);
@@ -43,7 +43,7 @@ describe('sc-broker failure handling and recovery', function () {
     };
     launchServer();
 
-    client = scBroker.createClient(conf);
+    client = agBroker.createClient(conf);
     (async () => {
       for await (let {error} of client.listener('error')) {
         console.error('client error', error);
